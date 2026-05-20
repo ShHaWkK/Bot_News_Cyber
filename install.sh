@@ -1,149 +1,140 @@
 #!/usr/bin/env bash
 # ============================================================================
-# install.sh — Installation du bot de veille cybersécurité
-# Testé sur Debian 12 / Ubuntu 24.04 LTS
-# À lancer en root : sudo bash install.sh
+# install.sh — cyber-news-bot v2
+# Usage : sudo bash install.sh
+# Workflow : git clone <repo> quelque_part && cd quelque_part && sudo bash install.sh
 # ============================================================================
 set -euo pipefail
 
-#  Variables 
 BOT_USER="alx-ops"
 BOT_GROUP="alx-ops"
 INSTALL_DIR="/opt/cyber-news-bot"
 VENV_DIR="${INSTALL_DIR}/venv"
 SERVICE_NAME="cyber-news-bot"
-PYTHON_MIN="3.11"
 
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
-
+GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[+]${NC} $*"; }
 warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 err()  { echo -e "${RED}[✗]${NC} $*"; exit 1; }
 
-#  Vérification root 
-[[ "$EUID" -ne 0 ]] && err "Ce script doit être exécuté en root (sudo bash install.sh)"
+[[ "$EUID" -ne 0 ]] && err "Lancez en root : sudo bash install.sh"
 
-#  Vérification Python 
-log "Vérification de Python ${PYTHON_MIN}+..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ── Python ──────────────────────────────────────────────────────────────────
+log "Recherche de Python 3.11+..."
 PYTHON_BIN=""
 for bin in python3.13 python3.12 python3.11; do
-    if command -v "$bin" &>/dev/null; then
-        PYTHON_BIN="$bin"
-        break
-    fi
+    command -v "$bin" &>/dev/null && { PYTHON_BIN="$bin"; break; }
 done
 
 if [[ -z "$PYTHON_BIN" ]]; then
-    log "Installation de Python 3.11 depuis les dépôts..."
+    log "Installation de Python 3.11..."
     apt-get update -qq
     apt-get install -y python3.11 python3.11-venv python3.11-dev python3-pip
     PYTHON_BIN="python3.11"
 fi
+log "Python : $PYTHON_BIN ($("$PYTHON_BIN" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'))"
 
-PYTHON_VERSION=$("$PYTHON_BIN" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-log "Python détecté : $PYTHON_BIN (${PYTHON_VERSION})"
-
-#  Dépendances système 
-log "Installation des dépendances système..."
+# ── Dépendances système ──────────────────────────────────────────────────────
+log "Dépendances système..."
 apt-get update -qq
 apt-get install -y --no-install-recommends \
-    curl \
-    git \
-    sqlite3 \
-    libxml2-dev \
-    libxslt1-dev \
-    build-essential \
-    ca-certificates \
-    openssl
+    curl git sqlite3 libxml2-dev libxslt1-dev \
+    build-essential ca-certificates openssl
 
-#  Création de l'utilisateur 
+# ── Utilisateur service ──────────────────────────────────────────────────────
 if ! id "$BOT_USER" &>/dev/null; then
     log "Création de l'utilisateur ${BOT_USER}..."
     useradd --system --no-create-home --shell /usr/sbin/nologin \
-            --comment "Cyber News Bot service account" \
-            "$BOT_USER"
+            --comment "Cyber News Bot" "$BOT_USER"
 else
     log "Utilisateur ${BOT_USER} existe déjà."
 fi
 
-#  Structure des dossiers 
-log "Création de la structure ${INSTALL_DIR}..."
-mkdir -p \
-    "${INSTALL_DIR}/app/sources" \
-    "${INSTALL_DIR}/app/reports" \
-    "${INSTALL_DIR}/data" \
-    "${INSTALL_DIR}/logs"
+# ── Dossiers ─────────────────────────────────────────────────────────────────
+log "Structure ${INSTALL_DIR}..."
+mkdir -p "${INSTALL_DIR}/data" "${INSTALL_DIR}/logs"
 
-#  Copie des fichiers 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-log "Copie des fichiers depuis ${SCRIPT_DIR}..."
-rsync -av --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' \
-      --exclude='.env' --exclude='venv' --exclude='data/*.sqlite' \
-      "${SCRIPT_DIR}/" "${INSTALL_DIR}/"
+# ── Copie des fichiers (si on n'est pas déjà dans INSTALL_DIR) ───────────────
+if [[ "$SCRIPT_DIR" != "$INSTALL_DIR" ]]; then
+    log "Copie depuis ${SCRIPT_DIR} → ${INSTALL_DIR}..."
+    rsync -a --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' \
+          --exclude='.env' --exclude='venv' --exclude='data/*.sqlite' \
+          "${SCRIPT_DIR}/" "${INSTALL_DIR}/"
+else
+    log "Dossier source = INSTALL_DIR — copie ignorée."
+fi
 
-#  Environnement virtuel Python 
+# ── Virtualenv Python ────────────────────────────────────────────────────────
 if [[ ! -d "$VENV_DIR" ]]; then
-    log "Création de l'environnement virtuel Python..."
+    log "Création du virtualenv..."
     "$PYTHON_BIN" -m venv "$VENV_DIR"
 fi
 
 log "Installation des dépendances Python..."
 "${VENV_DIR}/bin/pip" install --upgrade pip --quiet
 "${VENV_DIR}/bin/pip" install -r "${INSTALL_DIR}/requirements.txt" --quiet
+log "Dépendances Python installées."
 
-#  Fichier .env 
+# ── Fichier .env ─────────────────────────────────────────────────────────────
 if [[ ! -f "${INSTALL_DIR}/.env" ]]; then
-    log "Création du fichier .env depuis .env.example..."
+    log "Création du .env depuis .env.example..."
     cp "${INSTALL_DIR}/.env.example" "${INSTALL_DIR}/.env"
-    warn "⚠️  IMPORTANT : Éditez ${INSTALL_DIR}/.env et renseignez :"
-    warn "   TELEGRAM_BOT_TOKEN=votre_token"
-    warn "   TELEGRAM_CHAT_ID=votre_chat_id (après --get-chat-id)"
+    warn "⚠️  Editez ${INSTALL_DIR}/.env avant de démarrer :"
+    warn "   TELEGRAM_BOT_TOKEN=..."
+    warn "   TELEGRAM_CHAT_ID=..."
 else
-    log "Fichier .env déjà présent — non modifié."
+    log ".env déjà présent — non écrasé."
 fi
 
-#  Permissions 
-log "Application des permissions..."
+# ── Permissions ──────────────────────────────────────────────────────────────
+log "Permissions..."
 chown -R "${BOT_USER}:${BOT_GROUP}" "${INSTALL_DIR}"
 chmod 750 "${INSTALL_DIR}"
 chmod 640 "${INSTALL_DIR}/.env"
 chmod 750 "${INSTALL_DIR}/data" "${INSTALL_DIR}/logs"
-chmod +x "${INSTALL_DIR}/install.sh" 2>/dev/null || true
 
-#  Service systemd 
-log "Installation du service systemd..."
+# ── Systemd ──────────────────────────────────────────────────────────────────
+log "Service systemd ${SERVICE_NAME}..."
 cp "${INSTALL_DIR}/cyber-news-bot.service" "/etc/systemd/system/${SERVICE_NAME}.service"
 systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}"
+log "Service activé (démarrage auto au boot)."
 
-#  Résumé 
+# ── Résumé ───────────────────────────────────────────────────────────────────
+PYTHON="${VENV_DIR}/bin/python"
+MAIN="${INSTALL_DIR}/app/main.py"
+
 echo ""
-echo "════════════════════════════════════════════════════════"
-echo "  ✅  Installation terminée !"
-echo "════════════════════════════════════════════════════════"
+echo "════════════════════════════════════════════════════════════"
+echo "  ✅  Installation terminée — cyber-news-bot v2"
+echo "════════════════════════════════════════════════════════════"
 echo ""
-echo "Étapes suivantes :"
+echo "── Étapes suivantes ──────────────────────────────────────"
 echo ""
-echo "1. Configurez votre token Telegram :"
+echo "1) Configurez vos credentials Telegram :"
 echo "   nano ${INSTALL_DIR}/.env"
+echo "   → TELEGRAM_BOT_TOKEN=..."
+echo "   → TELEGRAM_CHAT_ID=..."
 echo ""
-echo "2. Récupérez votre chat_id :"
-echo "   sudo -u ${BOT_USER} ${VENV_DIR}/bin/python ${INSTALL_DIR}/app/main.py --get-chat-id"
+echo "2) Testez la connexion Telegram :"
+echo "   sudo -u ${BOT_USER} ${PYTHON} -m app.main test-telegram"
 echo ""
-echo "3. Testez la notification :"
-echo "   sudo -u ${BOT_USER} ${VENV_DIR}/bin/python ${INSTALL_DIR}/app/main.py --test-telegram"
+echo "3) Backfill initial (60 jours d'historique) :"
+echo "   sudo -u ${BOT_USER} ${PYTHON} -m app.main backfill 60"
+echo "   (peut prendre 10-20 min selon le volume NVD)"
 echo ""
-echo "4. Lancez le backfill initial (60 jours) :"
-echo "   sudo -u ${BOT_USER} ${VENV_DIR}/bin/python ${INSTALL_DIR}/app/main.py --backfill 60"
-echo ""
-echo "5. Démarrez le service :"
+echo "4) Démarrez le bot :"
 echo "   systemctl start ${SERVICE_NAME}"
 echo "   systemctl status ${SERVICE_NAME}"
 echo ""
-echo "6. Consultez les logs :"
-echo "   tail -f ${INSTALL_DIR}/logs/bot.log"
+echo "5) Logs en direct :"
 echo "   journalctl -u ${SERVICE_NAME} -f"
+echo "   tail -f ${INSTALL_DIR}/logs/bot.log"
+echo ""
+echo "── Commandes utiles ──────────────────────────────────────"
+echo "   Stats 7j  : sudo -u ${BOT_USER} ${PYTHON} -m app.main stats 7"
+echo "   Run once  : sudo -u ${BOT_USER} ${PYTHON} -m app.main run-once"
+echo "   Enrich    : sudo -u ${BOT_USER} ${PYTHON} -m app.main enrich 50"
 echo ""
