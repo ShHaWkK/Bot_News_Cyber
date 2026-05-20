@@ -193,10 +193,10 @@ def build_scheduler() -> BackgroundScheduler:
         replace_existing=True, max_instances=1,
     )
 
-    # Commandes Telegram (toutes les minutes)
+    # Commandes Telegram (toutes les 15 secondes)
     scheduler.add_job(
         _handle_commands,
-        trigger=IntervalTrigger(minutes=1),
+        trigger=IntervalTrigger(seconds=15),
         id="bot_commands", name="Commandes Telegram",
         replace_existing=True, max_instances=1,
     )
