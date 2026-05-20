@@ -39,6 +39,8 @@ def fetch(since: Optional[datetime] = None) -> list[CyberItem]:
     Récupère le catalogue KEV complet et filtre sur `since` si fourni.
     Toutes les entrées KEV sont marquées is_kev=True et is_actively_exploited=True.
     """
+    if since is not None and since.tzinfo is not None:
+        since = since.replace(tzinfo=None)
     log.info("[CISA-KEV] Récupération du catalogue...")
     try:
         data = _fetch()

@@ -139,6 +139,8 @@ def fetch(since: Optional[datetime] = None, days: int = 7) -> list[CyberItem]:
     """
     if since is None:
         since = datetime.utcnow() - timedelta(days=days)
+    elif since.tzinfo is not None:
+        since = since.replace(tzinfo=None)
 
     # NVD attend des dates au format ISO 8601
     pub_start = since.strftime("%Y-%m-%dT%H:%M:%S.000")

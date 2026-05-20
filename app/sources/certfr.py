@@ -81,6 +81,8 @@ def _parse_feed(feed_url: str, feed_type: str, since: Optional[datetime]) -> lis
 
 
 def fetch(since: Optional[datetime] = None) -> list[CyberItem]:
+    if since is not None and since.tzinfo is not None:
+        since = since.replace(tzinfo=None)
     log.info("[CERT-FR] Récupération des flux RSS...")
     all_items: list[CyberItem] = []
     for feed_def in _FEEDS:

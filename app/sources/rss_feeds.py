@@ -91,6 +91,8 @@ def _parse_single_feed(
 
 
 def fetch(since: Optional[datetime] = None) -> list[CyberItem]:
+    if since is not None and since.tzinfo is not None:
+        since = since.replace(tzinfo=None)
     log.info("[RSS] Récupération de %d flux...", len(config.RSS_FEEDS))
     all_items: list[CyberItem] = []
 

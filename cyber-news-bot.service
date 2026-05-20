@@ -1,0 +1,44 @@
+[Unit]
+Description=Bot de veille cybersécurité — cyber-news-bot
+Documentation=https://github.com/alx-ops/cyber-news-bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alx-ops
+Group=alx-ops
+WorkingDirectory=/opt/cyber-news-bot
+EnvironmentFile=/opt/cyber-news-bot/.env
+
+ExecStart=/opt/cyber-news-bot/venv/bin/python /opt/cyber-news-bot/app/main.py daemon
+
+Restart=always
+RestartSec=10
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+#  Durcissement sécurité 
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/cyber-news-bot/data /opt/cyber-news-bot/logs
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+#  Limites ressources 
+LimitNOFILE=65536
+MemoryMax=512M
+CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target

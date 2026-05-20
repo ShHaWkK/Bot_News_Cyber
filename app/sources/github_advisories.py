@@ -159,6 +159,8 @@ def fetch(since: Optional[datetime] = None) -> list[CyberItem]:
     from datetime import timedelta
     if since is None:
         since = datetime.utcnow() - timedelta(days=7)
+    elif since.tzinfo is not None:
+        since = since.replace(tzinfo=None)
 
     published_since = since.strftime("%Y-%m-%dT%H:%M:%SZ")
     log.info("[GitHub-GHSA] Récupération depuis %s", since.strftime("%Y-%m-%d"))
